@@ -1,0 +1,150 @@
+package com.aem.community.core.servlets;
+ 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.rmi.ServerException;
+import java.util.Dictionary;
+   
+import org.apache.felix.scr.annotations.Properties;
+import org.apache.felix.scr.annotations.Property;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.sling.SlingServlet;
+import org.apache.sling.api.SlingHttpServletRequest;
+import org.apache.sling.api.SlingHttpServletResponse;
+import org.apache.sling.api.servlets.SlingSafeMethodsServlet;
+import org.apache.sling.commons.osgi.OsgiUtil;
+import org.apache.sling.jcr.api.SlingRepository;
+import org.apache.felix.scr.annotations.Reference;
+import org.osgi.service.component.ComponentContext;
+import javax.jcr.Session;
+import javax.jcr.Node; 
+import java.util.UUID;
+import java.util.Date; 
+import java.text.SimpleDateFormat;  
+ 
+import org.apache.sling.api.resource.Resource ; 
+ 
+import java.util.Map; 
+import java.util.HashMap; 
+//import javax.mail.MessagingException ; 
+ 
+import org.apache.commons.lang.text.StrLookup; 
+ 
+import org.apache.felix.scr.annotations.Reference;
+ 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+   
+ 
+ 
+ 
+import com.day.cq.mailer.MessageGateway;
+import com.day.cq.mailer.MessageGatewayService;
+ 
+import com.day.cq.commons.mail.MailTemplate ;  
+   
+import org.apache.commons.mail.Email;
+import org.apache.commons.mail.HtmlEmail;
+import org.apache.commons.mail.EmailException;
+import org.apache.commons.mail.SimpleEmail;
+   
+@SlingServlet(paths="/bin/htlSearchServlet", methods = "POST", metatype=true)
+public class SimpleServlet extends org.apache.sling.api.servlets.SlingAllMethodsServlet {
+     private static final long serialVersionUID = 2598426539166789515L;
+        
+     @Reference
+     private MessageGatewayService messageGatewayService;
+      
+      
+     /** Default log. */
+     protected final Logger log = LoggerFactory.getLogger(this.getClass());
+            
+             
+     @Override
+     protected void doPost(SlingHttpServletRequest request, SlingHttpServletResponse response) throws ServerException, IOException {
+         
+      try
+      {
+         //Get the submitted data from the HTL front end
+          String hostPrefix = request.getParameter("hostPrefix");
+          String forumUrl = request.getParameter("forumUrl");
+          String modifiedByFullname = request.getParameter("modifiedByFullname");
+          String TopicSubject = request.getParameter("TopicSubject");
+          String topicUrl = request.getParameter("topicUrl");
+          String message = request.getParameter("message"); 
+                     
+          log.info("*** SUBJECT: "+TopicSubject); 
+      
+           
+          //Send the email based on a AEM JCR template
+          SendHHTMLEmail(request, hostPrefix,forumUrl,modifiedByFullname, TopicSubject,topicUrl,message  )  ;
+           
+          
+          
+         //Return the JSON formatted data
+         response.getWriter().write("EMAIL GONE");   
+          
+      }
+      catch(Exception e)
+      {
+          e.printStackTrace();
+      }
+    }
+      
+  
+    //Send an AEM Email based on a template located at 
+     ///etc/notification/email/html/com.day.cq.collab.forum/en.txt
+    private void SendHHTMLEmail(SlingHttpServletRequest request, String hostPrefix,String forumUrl, String modifiedByFullname, String TopicSubject, String topicUrl, String message  )
+    {
+         try
+         {
+              //Creare a MAP to populate the email template variables 
+              Map myMap = new HashMap() ; 
+              String timeStamp = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new Date());
+                  
+               
+              //Populate the MAP with the values submitted from the HTL front end
+              myMap.put("topic.subject",TopicSubject); 
+              myMap.put("time",timeStamp); 
+              myMap.put("host.prefix",hostPrefix); 
+              myMap.put("forum.url",forumUrl); 
+              myMap.put("modifiedBy.fullname",modifiedByFullname); 
+              myMap.put("topic.url",topicUrl); 
+              myMap.put("post.message",message); 
+              
+              
+             //Declare a MessageGateway service
+             MessageGateway<HtmlEmail> messageGateway; 
+                        
+             //Specify the EMail template 
+             String template ="/etc/notification/email/html/com.day.cq.collab.forum/en.txt";
+              
+            Resource templateRsrc = request.getResourceResolver().getResource(template);
+               
+            MailTemplate mailTemplate = MailTemplate.create(templateRsrc.getPath(), templateRsrc.getResourceResolver().adaptTo(Session.class));
+                      
+           HtmlEmail email = mailTemplate.getEmail(StrLookup.mapLookup(myMap), HtmlEmail.class);
+                    
+           email.addTo("tblue@noserver.com");
+           email.setSubject("AEM Email Template");
+           email.setFrom("wwhite@noserver.com"); 
+                      
+             
+          //Inject a MessageGateway Service and send the message
+           messageGateway = this.messageGatewayService.getGateway(HtmlEmail.class);
+         messageGateway.send((HtmlEmail) email);
+          
+         }
+             catch (Exception e)
+             {
+                  
+                  log.info(e.getMessage())  ; 
+             }
+    }
+      
+}
